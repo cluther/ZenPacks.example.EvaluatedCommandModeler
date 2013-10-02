@@ -14,8 +14,8 @@ class EvaluatedCommand(CommandPlugin):
         )
 
     # Note that we're using TALES in the command. Normally that's not
-    # possible. Check out the monkeypatch of channelOpen in this
-    # ZenPack's __init__.py to see what makes it possible.
+    # possible. Check out the monkeypatch of CollectorClient.getCommands
+    # in this ZenPack's __init__.py to see what makes it possible.
 
     command = '${here/zExamplePath}/myscript.sh'
 
