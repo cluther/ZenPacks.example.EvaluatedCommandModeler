@@ -28,6 +28,9 @@ if 'CollectorClient' in sys.modules:
         attribute.
         '''
         for command in self._commands:
+            if '${' not in command:
+                yield command
+
             try:
                 yield talesEvalStr(command, self.device)
             except Exception:
