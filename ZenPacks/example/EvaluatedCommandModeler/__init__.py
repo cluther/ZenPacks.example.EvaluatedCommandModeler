@@ -2,6 +2,7 @@ import sys
 
 from Products.ZenModel.ZenPack import ZenPack as ZenPackBase
 from Products.ZenRelations.zPropertyCategory import setzPropertyCategory
+from Products.ZenUtils.Utils import monkeypatch
 from Products.ZenUtils.ZenTales import talesEvalStr
 
 
@@ -14,28 +15,50 @@ class ZenPack(ZenPackBase):
         ]
 
 
-# SshClient does a relative import of CollectorClient. This makes it
-# impossible to use the @monkeypatch decorator. We instead have to find
-# the relative import in sys.modules and monkeypatch it there.
+# SshClient does a relative import of CollectorClient. This means we
+# have to monkeypatch the relative CollectorClient module already in
+# sys.modules.
 if 'CollectorClient' in sys.modules:
     CollectorClient = sys.modules['CollectorClient']
 
-    def CollectorClient_getCommands(self):
-        '''
-        The commands which we will use to collect data.
+    @monkeypatch(CollectorClient.CollectorClient)
+    def __init__(self, *args, **kwargs):
+        # original is injected into locals by the monkeypatch decorator.
+        original(self, *args, **kwargs)
 
-        Overridden here to allow TALES evaluation of modeler plugin command
-        attribute.
-        '''
-        for command in self._commands:
-            if '${' not in command:
-                yield command
+        # Reset cmdmap and _commands.
+        self.cmdmap = {}
+        self._commands = []
 
-            try:
-                yield talesEvalStr(command, self.device)
-            except Exception:
-                CollectorClient.log.exception(
-                    "%s - command parsing error",
-                    self.device.id)
+        # Get plugins from args or kwargs.
+        plugins = kwargs.get('plugins')
+        if plugins is None:
+            if len(args) > 3:
+                plugins = args[3]
+            else:
+                plugins = []
 
-    CollectorClient.CollectorClient.getCommands = CollectorClient_getCommands
+        # Get device from args or kwargs.
+        device = kwargs.get('device')
+        if device is None:
+            if len(args) > 5:
+                device = args[5]
+            else:
+                device = None
+
+        # Do TALES evaluation of each plugin's command.
+        for plugin in plugins:
+            if '${' in plugin.command:
+                try:
+                    command = talesEvalStr(plugin.command, device)
+                except Exception:
+                    CollectorClient.log.exception(
+                        "%s - command parsing error",
+                        device.id)
+
+                    continue
+            else:
+                command = plugin.command
+
+            self.cmdmap[command] = plugin
+            self._commands.append(command)
